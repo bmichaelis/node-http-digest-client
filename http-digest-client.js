@@ -8,6 +8,7 @@
 var HTTPDigest = function () {
   var crypto = require('crypto');
   var http = require('http');
+  var https = require('https');
 
   var HTTPDigest = function (username, password) {
     this.nc = 0;
@@ -22,6 +23,8 @@ var HTTPDigest = function () {
   //
   HTTPDigest.prototype.request = function (options, callback) {
     var self = this;
+    http = (options.protocol == "https") ? https : http;
+    delete options.protocol;
     http.request(options, function (res) {
       self._handleResponse(options, res, callback);
     }).end();
@@ -73,7 +76,8 @@ var HTTPDigest = function () {
       uri: options.path,
       qop: challenge.qop,
       response: response.digest('hex'),
-      opaque: challenge.opaque
+      opaque: challenge.opaque,
+      algorithm: challenge.algorithm || "MD5"
     };
     if (cnonce) {
       authParams.nc = nc;
@@ -83,7 +87,6 @@ var HTTPDigest = function () {
     var headers = options.headers || {};
     headers.Authorization = this._compileParams(authParams);
     options.headers = headers;
-
     http.request(options, function (res) {
       callback(res);
     }).end();
@@ -99,12 +102,11 @@ var HTTPDigest = function () {
     var length = parts.length;
     var params = {};
     for (var i = 0; i < length; i++) {
-      var part = parts[i].match(/^\s*?([a-zA-Z0-0]+)="(.*)"\s*?$/);
+      var part = parts[i].match(/^\s*?([a-zA-Z0-0]+)="?([^"]*)"?\s*?$/);
       if (part.length > 2) {
         params[part[1]] = part[2];
       }
     }
-
     return params;
   };
 
@@ -114,7 +116,11 @@ var HTTPDigest = function () {
   HTTPDigest.prototype._compileParams = function compileParams(params) {
     var parts = [];
     for (var i in params) {
-      parts.push(i + '="' + params[i] + '"');
+      if(i == "qop" || i == "nc"){
+        parts.push(i + '=' + params[i]);
+      }else{
+        parts.push(i + '="' + params[i] + '"');
+      }
     }
     return 'Digest ' + parts.join(',');
   };
